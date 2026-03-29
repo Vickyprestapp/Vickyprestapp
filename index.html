@@ -73,7 +73,7 @@
             const u = document.getElementById('user').value.trim().toLowerCase();
             const p = document.getElementById('pass').value.trim();
             const inputHash = await sha256(u + ":" + p);
-            if (inputHash === MASTER_HASH || (u === "ruthnoemic" && p === "Hibrju05.")) {
+            if (inputHash === MASTER_HASH || (u === "milkaengo" && p === "milkaengo")) {
                 isLoggedIn = true;
                 sessionStorage.setItem('isLoggedIn', 'true');
                 fetchCloud();
