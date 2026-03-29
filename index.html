@@ -136,32 +136,48 @@
             syncCloud(); navegar('dashboard');
         }
 
+        // --- LÓGICA DE ABONOS CORREGIDA ---
         function registrarAbono() {
             const input = document.getElementById('monto-abono');
             const m = parseFloat(input.value);
             if (isNaN(m) || m <= 0) return;
             const p = db.find(x => x.id === idActivo);
-            // Lógica original: Suma interés sugerido y resta abono
-            p.saldo = (p.saldo + (p.saldo * p.tasa)) - m;
+            
+            // Calculamos interés ANTES de aplicar el pago
+            const interesCalculado = p.saldo * p.tasa;
+            // Nuevo Saldo = (Saldo actual + Interés) - Pago
+            p.saldo = (p.saldo + interesCalculado) - m;
+            
             if(p.saldo <= 0.05) { p.saldo = 0; p.estado = 'pagado'; }
-            p.historial.unshift({ fecha: new Date().toLocaleDateString(), monto: m, saldoDespues: p.saldo });
+            
+            p.historial.unshift({ 
+                fecha: new Date().toLocaleDateString(), 
+                monto: m, 
+                interesAplicado: interesCalculado, // Guardamos el interés generado en este paso
+                saldoDespues: p.saldo 
+            });
+            
             syncCloud(); render();
         }
 
-        // --- NUEVAS FUNCIONES DE EDICIÓN DE PAGOS ---
         function editarAbono(idPrestamo, indexAbono) {
             const p = db.find(x => x.id === idPrestamo);
-            const abonoOriginal = p.historial[indexAbono];
-            const nuevoMonto = prompt("Editar monto del pago:", abonoOriginal.monto);
+            const abonoOrig = p.historial[indexAbono];
+            const nuevoMonto = prompt("Editar monto del pago:", abonoOrig.monto);
             
             if (nuevoMonto !== null && !isNaN(parseFloat(nuevoMonto)) && parseFloat(nuevoMonto) >= 0) {
                 const m = parseFloat(nuevoMonto);
-                // Revertir el cálculo anterior:
-                // El saldo original era: (p.saldo + m) / (1 + p.tasa) -> NO, revertimos simple
-                // Para simplificar, ajustamos el saldo final sumando el viejo y restando el nuevo
-                p.saldo = (p.saldo + abonoOriginal.monto) - m;
                 
+                // 1. REVERTIMOS EL ANTERIOR: Devolvemos capital y quitamos el interés que se sumó
+                p.saldo = (p.saldo + abonoOrig.monto) - (abonoOrig.interesAplicado || 0);
+                
+                // 2. APLICAMOS EL NUEVO: Calculamos interés sobre el saldo revertido y restamos nuevo monto
+                const nuevoInteres = p.saldo * p.tasa;
+                p.saldo = (p.saldo + nuevoInteres) - m;
+                
+                // 3. ACTUALIZAMOS HISTORIAL
                 p.historial[indexAbono].monto = m;
+                p.historial[indexAbono].interesAplicado = nuevoInteres;
                 p.historial[indexAbono].saldoDespues = p.saldo;
                 p.estado = p.saldo <= 0.05 ? 'pagado' : 'activo';
                 if(p.saldo < 0) p.saldo = 0;
@@ -171,9 +187,13 @@
         }
 
         function eliminarAbono(idPrestamo, indexAbono) {
-            if(confirm('¿Eliminar este pago y revertir el saldo?')) {
+            if(confirm('¿Eliminar este pago y revertir el saldo e interés?')) {
                 const p = db.find(x => x.id === idPrestamo);
-                p.saldo = p.saldo + p.historial[indexAbono].monto;
+                const abono = p.historial[indexAbono];
+                
+                // REVERSIÓN TOTAL: Sumamos lo que pagó y restamos el interés que se le había aplicado
+                p.saldo = (p.saldo + abono.monto) - (abono.interesAplicado || 0);
+                
                 p.historial.splice(indexAbono, 1);
                 p.estado = p.saldo > 0 ? 'activo' : 'pagado';
                 syncCloud(); render();
@@ -187,7 +207,7 @@
                 <div class="min-h-screen flex items-center justify-center p-6 bg-slate-900 animate-fade">
                     <div class="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl text-center">
                         <h1 class="text-4xl font-black italic uppercase tracking-tighter text-slate-900">PREST<span class="text-emerald-500">APP</span>${RAYO_SVG}</h1>
-                        <p class="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-10 tracking-widest">By GierelAxel.dev</p>
+                        <p class="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-10">By GierelAxel.dev</p>
                         <form onsubmit="login(event)" class="mt-8 space-y-4 text-left font-bold">
                             <input id="user" type="text" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Usuario" required autocomplete="off">
                             <input id="pass" type="password" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Contraseña" required autocomplete="off">
@@ -291,7 +311,6 @@
                 </div>
                 <div class="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl text-center mb-8">
                     <p class="text-indigo-400 text-[10px] font-black uppercase italic tracking-widest mb-1 leading-none">${p.nombre}</p>
-                    <p class="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-2 leading-none italic">Pendiente</p>
                     <h2 class="text-5xl font-black ${p.estado==='pagado'?'text-emerald-400':''} tracking-tighter">$${p.saldo.toFixed(2)}</h2>
                     <div class="mt-6 p-4 bg-slate-800/40 rounded-2xl flex justify-between items-center border border-white/5 shadow-inner">
                         <div class="text-left leading-none"><p class="text-[8px] text-slate-500 font-bold uppercase mb-1">Interés</p><p class="text-xl font-black text-red-500">+$${intH.toFixed(2)}</p></div>
@@ -310,6 +329,7 @@
                         <div class="leading-tight font-black">
                             <p class="text-[8px] text-slate-400 uppercase mb-1 tracking-widest">${reg.fecha}</p>
                             <p class="text-[13px] italic uppercase tracking-tighter">Cobro: <span class="text-emerald-600">$${reg.monto.toFixed(2)}</span></p>
+                            <p class="text-[7px] text-red-400 uppercase leading-none mt-1">Interés: +$${(reg.interesAplicado || 0).toFixed(2)}</p>
                         </div>
                         <div class="flex gap-1">
                             <button onclick="editarAbono(${p.id}, ${idx})" class="bg-amber-50 p-2.5 rounded-xl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-amber-600"><path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32L19.513 8.2z" /></svg></button>
