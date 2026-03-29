@@ -3,17 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PrestApp Cloud v18 - Analytics & Hover</title>
+    <title>PrestApp Cloud v18 - Protected Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-tap-highlight-color: transparent; 
+            /* Evita que se seleccione texto en la app */
+            user-select: none; 
+            -webkit-user-select: none;
+        }
         .modal-overlay { background: rgba(0,0,0,0.85); display: none; position: fixed; inset: 0; z-index: 100; justify-content: center; align-items: center; }
         .animate-fade { animation: fadeIn 0.2s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         
-        /* Efecto Hover/Active para las tarjetas */
         .card-loan { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
         .card-loan:active { transform: scale(0.96); background-color: #f8fafc; }
         @media (min-width: 768px) {
@@ -27,7 +32,7 @@
 <body class="bg-slate-50 text-slate-900">
 
     <div id="app-root">
-        <div class="min-h-screen flex items-center justify-center font-black text-indigo-600 animate-pulse uppercase tracking-widest text-xs">Conectando Sistema...</div>
+        <div class="min-h-screen flex items-center justify-center font-black text-indigo-600 animate-pulse uppercase tracking-widest text-xs">Protegiendo Conexión...</div>
     </div>
 
     <div id="modal-recibo" class="modal-overlay p-4">
@@ -52,8 +57,26 @@
     </div>
 
     <script>
+        // --- ESCUDO DE SEGURIDAD ---
+        // 1. Bloquear clic derecho
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // 2. Bloquear atajos (F12, Ctrl+Shift+I, Ctrl+U)
+        document.addEventListener('keydown', e => {
+            if (e.keyCode === 123 || 
+               (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || 
+               (e.ctrlKey && e.keyCode === 85)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // 3. Anti-Debugger (congela la app si abren la consola)
+        setInterval(() => { (function() { debugger; })(); }, 1000);
+
+        // --- CONFIGURACIÓN BASE ---
         const SUPABASE_URL = "https://lpkngbquclgcsjckrqzb.supabase.co"; 
-        const SUPABASE_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxwa25nYnF1Y2xnY3NqY2tycXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NTMwNjMsImV4cCI6MjA5MDMyOTA2M30.2sOodr2sa3D-DmmRX3NyFUygb9SKksd7Qvyyf8gqSLg";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxwa25nYnF1Y2xnY3NqY2tycXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NTMwNjMsImV4cCI6MjA5MDMyOTA2M30.2sOodr2sa3D-DmmRX3NyFUygb9SKksd7Qvyyf8gqSLg";
         const SECRET_TAG = "mis_datos_privados_777";
         const MASTER_HASH = "898492087612f1228490a02059080708f75b871900f6e69317094054a3233824";
 
@@ -145,8 +168,8 @@
                         <h1 class="text-4xl font-black italic uppercase tracking-tighter text-slate-900">PREST<span class="text-emerald-500">APP</span>${RAYO_SVG}</h1>
                         <p class="text-[10px] font-medium text-slate-500 uppercase tracking-widest mb-10 tracking-widest">By GierelAxel.dev</p>
                         <form onsubmit="login(event)" class="mt-8 space-y-4 text-left font-bold">
-                            <input id="user" type="text" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Usuario" required>
-                            <input id="pass" type="password" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Contraseña" required>
+                            <input id="user" type="text" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Usuario" required autocomplete="off">
+                            <input id="pass" type="password" class="w-full p-4 bg-slate-50 rounded-2xl border outline-none" placeholder="Contraseña" required autocomplete="off">
                             <button type="submit" class="w-full bg-slate-900 text-white py-5 rounded-2xl uppercase text-[10px] tracking-widest shadow-xl font-black italic">Desbloquear</button>
                         </form>
                     </div>
@@ -154,7 +177,6 @@
                 return;
             }
 
-            // --- CÁLCULOS ANALYTICS ---
             const activos = db.filter(p => p.estado !== 'pagado');
             const completados = db.filter(p => p.estado === 'pagado');
             const capCalle = activos.reduce((acc, p) => acc + p.saldo, 0);
