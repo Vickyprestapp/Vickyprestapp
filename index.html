@@ -40,7 +40,7 @@
         const SECRET_TAG = "mis_datos_privados_777";
 
         let db = [], vista = 'login', subVista = 'activos', idActivo = null, editandoPagoIdx = null;
-        let carteraActiva = 'SUSI'; // Inicia en la cartera con datos
+        let carteraActiva = 'SUSI'; 
         let calcData = { saldo: 0, tasa: 0.05, fechaUlt: '', abono: 0 };
 
         async function fetchCloud() {
@@ -61,6 +61,7 @@
                     headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                     body: JSON.stringify({ datos: db })
                 });
+                // Registro de logs (respaldo)
                 await fetch(`${SUPABASE_URL}/rest/v1/prestapp_logs`, {
                     method: 'POST',
                     headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
@@ -83,32 +84,6 @@
             render(); 
         }
 
-        function eliminarPago(idx) {
-            if(!confirm('¿Eliminar este abono?')) return;
-            const p = db.find(x => x.id === idActivo);
-            p.saldo += p.historial[idx].cobroCapital;
-            p.historial.splice(idx, 1);
-            if(p.saldo > 0.05) p.estado = 'activo';
-            syncCloud().then(() => render());
-        }
-
-        function prepararEdicion(idx) {
-            const p = db.find(x => x.id === idActivo);
-            const pago = p.historial[idx];
-            editandoPagoIdx = idx;
-            render();
-            setTimeout(() => {
-                document.getElementById('monto-pago').value = pago.monto;
-                document.getElementById('monto-pago').focus();
-            }, 50);
-        }
-
-        function eliminarRegistroCompleto(id) {
-            if(!confirm('¿ELIMINAR CLIENTE? Se perderá todo su historial.')) return;
-            db = db.filter(x => x.id !== id);
-            syncCloud().then(() => navegar('dashboard'));
-        }
-
         function updateCalc() {
             if(!calcData.fechaUlt || !calcData.saldo) return;
             const hoy = new Date();
@@ -121,16 +96,9 @@
             document.getElementById('c-res').innerHTML = `
                 <p class="text-[10px] text-indigo-400 font-black uppercase mb-1">${dias} DÍAS (${quincenas} QUINCENAS)</p>
                 <div class="flex justify-between border-b border-white/10 pb-1"><span>SALDO BASE:</span><span>$${parseFloat(calcData.saldo).toFixed(2)}</span></div>
-                <div class="flex justify-between border-b border-white/10 py-1"><span>INT. ACUMULADO (${calcData.tasa*100}%):</span><span>$${interesAcumulado.toFixed(2)}</span></div>
+                <div class="flex justify-between border-b border-white/10 py-1"><span>INT. ACUMULADO (${(calcData.tasa*100).toFixed(0)}%):</span><span>$${interesAcumulado.toFixed(2)}</span></div>
                 <div class="flex justify-between font-black text-lg py-1 text-green-400"><span>TOTAL REAL:</span><span>$${totalDeuda.toFixed(2)}</span></div>
             `;
-        }
-
-        function calcularDias(p) {
-            const msDia = 1000 * 60 * 60 * 24;
-            let ref = (p.historial && p.historial.length > 0) ? p.historial[0].fecha : null;
-            let fechaRef = ref ? new Date(ref.split('/').reverse().join('-')) : new Date(p.id);
-            return Math.floor((new Date() - fechaRef) / msDia);
         }
 
         function render() {
@@ -148,12 +116,7 @@
                     </div>
                 </div>`;
             } else if (vista === 'dashboard') {
-                // Filtrar por cartera y manejar registros antiguos (sin cartera = SUSI)
-                const dbFiltrada = db.filter(p => {
-                    const c = p.cartera ? p.cartera.toUpperCase() : 'SUSI';
-                    return c === carteraActiva;
-                });
-
+                const dbFiltrada = db.filter(p => (p.cartera || 'SUSI').toUpperCase() === carteraActiva);
                 const activos = dbFiltrada.filter(p => p.estado !== 'pagado');
                 const capCalle = activos.reduce((a, b) => a + b.saldo, 0);
                 const ganPrev = activos.reduce((a, b) => a + (b.saldo * b.tasa), 0);
@@ -163,12 +126,10 @@
                     <button onclick="navegar('login')" class="text-[8px] font-black bg-red-500/20 text-red-400 px-3 py-2 rounded-xl border border-red-500/20">SALIR</button>
                 </header>
                 <div class="max-w-md mx-auto p-4 pb-32 animate-fade">
-                    
                     <div class="flex gap-1 mb-4 bg-slate-900 p-1 rounded-2xl font-black text-[9px] uppercase border border-white/10">
                         <button onclick="carteraActiva='SUSI';render()" class="flex-1 py-3 rounded-xl ${carteraActiva==='SUSI'?'bg-white text-slate-900 shadow-sm':'text-slate-400'}">Cartera Susi</button>
                         <button onclick="carteraActiva='MILKA';render()" class="flex-1 py-3 rounded-xl ${carteraActiva==='MILKA'?'bg-white text-slate-900 shadow-sm':'text-slate-400'}">Cartera Milka</button>
                     </div>
-
                     <div class="bg-slate-900 p-8 rounded-[2.8rem] text-white shadow-xl mb-4 text-center border-b-4 border-green-500">
                         <p class="text-[10px] font-black uppercase text-indigo-400 mb-1 tracking-widest">Capital Calle (${carteraActiva})</p>
                         <p class="text-4xl font-black italic tracking-tighter">$${capCalle.toLocaleString('es-ES', {minimumFractionDigits:2})}</p>
@@ -193,7 +154,12 @@
                 if(subVista === 'calc') {
                     h += `<div class="bg-white p-6 rounded-[2.5rem] shadow-xl space-y-4 border border-slate-100">
                         <input type="number" placeholder="Saldo Actual $" oninput="calcData.saldo=this.value;updateCalc()" class="w-full p-4 bg-slate-50 rounded-2xl font-black outline-none text-center">
-                        <div class="grid grid-cols-2 gap-2"><select onchange="calcData.tasa=parseFloat(this.value);updateCalc()" class="p-4 bg-slate-50 rounded-2xl font-black outline-none"><option value="0.05">5%</option><option value="0.10">10%</option><option value="0.15">15%</option></select><input type="date" onchange="calcData.fechaUlt=this.value;updateCalc()" class="p-4 bg-slate-50 rounded-2xl font-bold text-[10px]"></div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select onchange="calcData.tasa=parseFloat(this.value);updateCalc()" class="p-4 bg-slate-50 rounded-2xl font-black outline-none">
+                                <option value="0.05">5%</option><option value="0.10">10%</option><option value="0.15">15%</option>
+                            </select>
+                            <input type="date" onchange="calcData.fechaUlt=this.value;updateCalc()" class="p-4 bg-slate-50 rounded-2xl font-bold text-[10px]">
+                        </div>
                         <div id="c-res" class="bg-slate-900 p-6 rounded-3xl text-white text-[11px] font-bold space-y-1"></div>
                         <button onclick="prepararCapturaCalc()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-black uppercase text-[10px]">📷 Proyectar Recibo</button>
                     </div>`;
@@ -242,7 +208,7 @@
                 h = `<div class="max-w-md mx-auto p-6 animate-fade">
                     <h2 class="text-2xl font-black uppercase italic mb-8 text-center">${edit?'Ficha del':'Nuevo'} Cliente</h2>
                     <div class="bg-white p-10 rounded-[3rem] shadow-2xl space-y-4">
-                        <p class="text-[9px] font-black text-slate-400 text-center uppercase tracking-widest">SE GUARDARÁ EN: CARTERA ${carteraActiva}</p>
+                        <p class="text-[9px] font-black text-slate-400 text-center uppercase tracking-widest">GUARDAR EN: CARTERA ${carteraActiva}</p>
                         <input id="f-nom" value="${edit?edit.nombre:''}" placeholder="NOMBRE COMPLETO" class="w-full p-4 bg-slate-50 rounded-2xl font-black text-center text-xs outline-none uppercase">
                         <input id="f-sal" value="${edit?edit.saldo:''}" type="number" placeholder="SALDO INICIAL $" class="w-full p-4 bg-slate-50 rounded-2xl font-black text-center outline-none">
                         <select id="f-tas" class="w-full p-4 bg-slate-50 rounded-2xl font-black text-center outline-none"><option value="0.05" ${edit?.tasa===0.05?'selected':''}>5%</option><option value="0.10" ${edit?.tasa===0.10?'selected':''}>10%</option><option value="0.15" ${edit?.tasa===0.15?'selected':''}>15%</option></select>
@@ -276,11 +242,30 @@
             const t = parseFloat(document.getElementById('f-tas').value);
             if(!n || isNaN(s)) return alert("Completa los datos");
             if(id) { const p = db.find(x=>x.id===id); p.nombre = n; p.saldo = s; p.tasa = t; } 
-            else { 
-                // Se asigna automáticamente la cartera abierta en el Dashboard
-                db.push({id:Date.now(), nombre:n, saldo:s, tasa:t, cartera: carteraActiva, estado:'activo', historial:[]}); 
-            }
+            else { db.push({id:Date.now(), nombre:n, saldo:s, tasa:t, cartera: carteraActiva, estado:'activo', historial:[]}); }
             syncCloud().then(()=>navegar('dashboard'));
+        }
+
+        function eliminarPago(idx) {
+            if(!confirm('¿Eliminar este abono?')) return;
+            const p = db.find(x => x.id === idActivo);
+            p.saldo += p.historial[idx].cobroCapital;
+            p.historial.splice(idx, 1);
+            if(p.saldo > 0.05) p.estado = 'activo';
+            syncCloud().then(() => render());
+        }
+
+        function eliminarRegistroCompleto(id) {
+            if(!confirm('¿ELIMINAR CLIENTE? Se perderá todo su historial.')) return;
+            db = db.filter(x => x.id !== id);
+            syncCloud().then(() => navegar('dashboard'));
+        }
+
+        function calcularDias(p) {
+            const msDia = 1000 * 60 * 60 * 24;
+            let ref = (p.historial && p.historial.length > 0) ? p.historial[0].fecha : null;
+            let fechaRef = ref ? new Date(ref.split('/').reverse().join('-')) : new Date(p.id);
+            return Math.floor((new Date() - fechaRef) / msDia);
         }
 
         function prepararRecibo(n, m, s, f) {
@@ -297,15 +282,42 @@
             document.getElementById('modal-recibo').style.display = 'flex';
         }
 
+        function prepararCapturaCalc() {
+            if (!calcData.saldo || !calcData.fechaUlt) return alert("Ingresa saldo y fecha");
+            const hoy = new Date();
+            const fRef = new Date(calcData.fechaUlt);
+            const dias = Math.floor((hoy - fRef) / (1000 * 60 * 60 * 24));
+            const q = Math.floor(dias / 15);
+            const int = (parseFloat(calcData.saldo) * calcData.tasa) * q;
+            const tot = parseFloat(calcData.saldo) + int;
+
+            document.getElementById('contenido-recibo').innerHTML = `
+                <h2 class="font-bold border-b pb-2 text-[10px] uppercase text-indigo-500">PROYECCIÓN DE PAGO</h2>
+                <div class="text-left text-[11px] my-4 space-y-1 font-bold uppercase italic">
+                    <p>FECHA: ${hoy.toLocaleDateString()}</p>
+                    <p>DÍAS: ${dias} (${q} QUINC.)</p>
+                </div>
+                <h1 class="text-4xl font-black my-2 tracking-tighter">$${tot.toFixed(2)}</h1>
+                <div class="text-[8px] text-left mt-2 text-slate-500 font-bold">
+                    <p>CAPITAL: $${parseFloat(calcData.saldo).toFixed(2)}</p>
+                    <p>INT. ACUM.: $${int.toFixed(2)}</p>
+                </div>
+                <p class="mt-4">-------------------------</p>
+                <p class="text-[10px] font-black text-indigo-600">CALCULADORA PRESTAPP ⚡</p>`;
+            document.getElementById('modal-recibo').style.display = 'flex';
+        }
+
         function cerrarModal() { document.getElementById('modal-recibo').style.display = 'none'; }
+        
         async function compartirImagen() {
             const area = document.getElementById('area-captura');
             const canvas = await html2canvas(area);
             canvas.toBlob(async (blob) => {
-                const file = new File([blob], 'prestapp.png', { type: 'image/png' });
+                const file = new File([blob], 'recibo.png', { type: 'image/png' });
                 if (navigator.share) await navigator.share({ files: [file], title: 'Recibo PrestApp' });
             });
         }
+
         window.onload = () => { fetchCloud(); };
     </script>
 </body>
